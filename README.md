@@ -1,30 +1,40 @@
-# Chat with Code
+# RAG Code Chat
+
+A Streamlit application that uses the Google Gemini API and LlamaIndex to let you chat with GitHub repositories! 
 
 ## Steps to Run
 
-**Navigate to the Project Directory:**
-Change to the directory where the `setup.sh`, `main.py`, `requirements.txt`, and `README.md` files are located. For example:
+### 1. Navigate to the Project Directory
+Change into the directory containing `main.py` and `requirements.txt`:
 ```sh
-cd Examples/Chat_with_Code
+cd rag_code_chat
 ```
 
-### 1. Run the Setup File
-Make the setup.sh Script Executable (if necessary):
-On Linux or macOS, you might need to make the setup.sh script executable:
-```shell
-chmod +x setup.sh
-```
-Execute the setup.sh script to set up the environment and install dependencies:
-```shell
-./setup.sh
-```
-Now, fill in the `.env` file with your secrets. You will need:
-- A GitHub Personal Access Token (for `GITHUB_TOKEN`).
-- A Gemini API Key (for `GEMINI_API_KEY`), which you can get for free from [Google AI Studio](https://aistudio.google.com/app/apikey).
+### 2. Setup the Virtual Environment and Dependencies
+It's recommended to use a virtual environment. Create and activate it, then install the required Python packages:
 
-### 2. Run the Python Script
-```shell
-source ~/.venvs/chat_with_code/bin/activate
+**On Windows:**
+```powershell
+python -m venv venv
+.\venv\Scripts\activate
+pip install -r requirements.txt
+```
 
+**On Linux/macOS:**
+```shell
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 3. Setup API Keys
+Rename or copy `.env.example` to `.env` and fill it with your secrets. You will need:
+- A **GitHub Personal Access Token** (for `GITHUB_TOKEN`).
+- A **Gemini API Key** (for `GEMINI_API_KEY`), which you can get for free from [Google AI Studio](https://aistudio.google.com/app/apikey).
+
+### 4. Run the Application
+Start the Streamlit web interface:
+```shell
 streamlit run main.py
 ```
+The app will open in your default browser. Paste a GitHub repository URL into the sidebar and start chatting!

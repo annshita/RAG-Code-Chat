@@ -66,7 +66,7 @@ def run_rag_completion(query_text: str, docs) -> str:
     return str(response)
 
 def main():
-    st.set_page_config(page_title="Chat with Code", layout="wide")
+    st.set_page_config(page_title="Code Chat", layout="wide")
 
     @st.fragment
     def download_response(response:str) :

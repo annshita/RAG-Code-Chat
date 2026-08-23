@@ -1,0 +1,8 @@
+streamlit
+python-dotenv
+llama-index-llms-gemini
+llama-index-embeddings-gemini
+google-genai
+llama-index-readers-github 
+llama-index
+nest_asyncio

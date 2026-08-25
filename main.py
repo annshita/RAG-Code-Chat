@@ -1,5 +1,11 @@
 import streamlit as st
 import os
+
+# Fix for Streamlit Cloud "Security Violation [pathsec.open]: refusing multiply-linked file"
+# Force NLTK and LlamaIndex to use a temporary writable directory instead of the bundled static cache.
+os.environ["NLTK_DATA"] = "/tmp/nltk_data"
+os.environ["LLAMA_INDEX_CACHE_DIR"] = "/tmp/llama_index_cache"
+
 from llama_index.core import Settings, VectorStoreIndex, PromptTemplate
 from llama_index.embeddings.gemini import GeminiEmbedding
 from llama_index.llms.gemini import Gemini

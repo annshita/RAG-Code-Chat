@@ -91,40 +91,41 @@ def main():
     if "docs" not in st.session_state:
         st.session_state.docs = None
     
-    # Header with title and buttons
-    col1, col2, col5, col3, col4 = st.columns([3, 1, 1, 1, 1])
-    with col1:
-        st.title("🧚🏻‍♀️Code Chat")
-    with col3:
-        st.link_button("✨ Star Repo", "https://github.com/annshita/RAG-Code-Chat")
-    with col4:
-        if st.button("🍃 Clear Chat"):
-            st.session_state.messages = []
-            st.rerun()
-    
+    # Header
+    st.title("🧚🏻‍♀️Code Chat")
     st.caption("Powered by 🍓 Google Gemini and 🌷 LlamaIndex")
     
-    # Sidebar
-    with st.sidebar:
-        st.subheader("GitHub Repository URL")
-        repo_url = st.text_input("", placeholder="Enter repository URL")
-        
-        if st.button("Load Repository"):
-            if repo_url:
-                try:
-                    github_token = os.getenv("GITHUB_TOKEN")
-                    gemini_api_key = os.getenv("GEMINI_API_KEY")
-                    
-                    if not github_token or not gemini_api_key:
-                        st.error("Missing API keys")
-                        st.stop()
-                    
-                    owner, repo, branch = parse_github_url(repo_url)
-                    with st.spinner("Loading repository..."):
-                        st.session_state.docs = load_github_data(github_token, owner, repo, branch)
-                    st.success("✓ Repository loaded successfully")
-                except Exception as e:
-                    st.error(f"Error: {str(e)}")
+    # GitHub URL Input
+    st.subheader("GitHub Repository")
+    repo_url = st.text_input("GitHub Repository URL", placeholder="Enter repository URL", label_visibility="collapsed")
+    
+    if st.button("Load Repository", type="primary"):
+        if repo_url:
+            try:
+                github_token = os.getenv("GITHUB_TOKEN")
+                gemini_api_key = os.getenv("GEMINI_API_KEY")
+                
+                if not github_token or not gemini_api_key:
+                    st.error("Missing API keys")
+                    st.stop()
+                
+                owner, repo, branch = parse_github_url(repo_url)
+                with st.spinner("Loading repository..."):
+                    st.session_state.docs = load_github_data(github_token, owner, repo, branch)
+                st.success("✓ Repository loaded successfully")
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+                
+    st.write("") # Add some spacing
+    
+    # Action Buttons
+    col1, col2 = st.columns(2)
+    with col1:
+        st.link_button("✨ Star Repo", "https://github.com/annshita/RAG-Code-Chat", use_container_width=True)
+    with col2:
+        if st.button("🍃 Clear Chat", use_container_width=True):
+            st.session_state.messages = []
+            st.rerun()
     
     # Display chat messages
     for message in st.session_state.messages:

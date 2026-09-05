@@ -13,8 +13,79 @@ from llama_index.readers.github import GithubRepositoryReader, GithubClient
 import re
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables (built-in keys - never surfaced in UI)
 load_dotenv()
+
+# ---------------------------------------------------------------------------
+# Helper: detect quota / rate-limit errors
+# ---------------------------------------------------------------------------
+QUOTA_KEYWORDS = [
+    "quota", "rate limit", "resource_exhausted", "resource exhausted",
+    "429", "too many requests", "limit exceeded", "rateLimitExceeded",
+]
+
+def is_quota_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return any(kw.lower() in msg for kw in QUOTA_KEYWORDS)
+
+
+# ---------------------------------------------------------------------------
+# Key resolution: prefer user-supplied keys, fall back to built-in
+# ---------------------------------------------------------------------------
+def get_gemini_key() -> str:
+    return (
+        st.session_state.get("user_gemini_key") or
+        os.getenv("GEMINI_API_KEY", "")
+    )
+
+def get_github_token() -> str:
+    return (
+        st.session_state.get("user_github_token") or
+        os.getenv("GITHUB_TOKEN", "")
+    )
+
+
+# ---------------------------------------------------------------------------
+# API key dialog (shown when quota is hit or user clicks Add API Keys)
+# ---------------------------------------------------------------------------
+@st.dialog("API Limit Reached - Add Your Own Keys")
+def show_api_key_dialog():
+    st.markdown(
+        "The built-in API quota has been exceeded. "
+        "Enter your own keys below to continue. "
+        "Your keys are stored only for this session and are **never** saved or logged."
+    )
+    st.markdown("---")
+
+    gemini_key = st.text_input(
+        "Gemini API Key",
+        type="password",
+        placeholder="AIza...",
+        value=st.session_state.get("user_gemini_key", ""),
+        help="Get yours at https://aistudio.google.com/app/apikey",
+    )
+    github_token = st.text_input(
+        "GitHub Personal Access Token",
+        type="password",
+        placeholder="github_pat_...",
+        value=st.session_state.get("user_github_token", ""),
+        help="Get yours at https://github.com/settings/tokens",
+    )
+
+    col_save, col_cancel = st.columns(2)
+    with col_save:
+        if st.button("Save & Retry", type="primary", use_container_width=True):
+            if gemini_key.strip():
+                st.session_state["user_gemini_key"] = gemini_key.strip()
+            if github_token.strip():
+                st.session_state["user_github_token"] = github_token.strip()
+            st.session_state["show_api_dialog"] = False
+            st.success("Keys saved! Please retry your last action.")
+            st.rerun()
+    with col_cancel:
+        if st.button("Cancel", use_container_width=True):
+            st.session_state["show_api_dialog"] = False
+            st.rerun()
 
 def parse_github_url(url):
     pattern = r"https?://github\.com/([^/]+)/([^/]+)(?:/tree/([^/]+))?"
@@ -41,16 +112,17 @@ def load_github_data(github_token, owner, repo, branch="main"):
     return loader.load_data(branch=branch)
 
 def run_rag_completion(query_text: str, docs) -> str:
+    api_key = get_gemini_key()
+
     llm = Gemini(
         model="models/gemini-3.5-flash",
-        api_key=os.getenv("GEMINI_API_KEY")
+        api_key=api_key,
     )
-
     embed_model = GeminiEmbedding(
         model_name="models/gemini-embedding-2",
-        api_key=os.getenv("GEMINI_API_KEY")
+        api_key=api_key,
     )
-    
+
     Settings.llm = llm
     Settings.embed_model = embed_model
 
@@ -66,94 +138,130 @@ def run_rag_completion(query_text: str, docs) -> str:
         "Query: {query_str}\n"
         "Answer: "
     )
-    
+
     query_engine.update_prompts({"response_synthesizer:text_qa_template": qa_prompt_tmpl})
     response = query_engine.query(query_text)
     return str(response)
 
-def main():
-    st.set_page_config(page_title="Code Chat", layout="wide")
 
-    @st.fragment
-    def download_response(response:str) :
-        st.download_button(
-                label="Download message",
-                type="secondary",
-                data=response,
-                file_name="chatbot_response.md",
-                mime="text/plain",
-                icon=":material/download:",
-            )
-    
-    # Initialize session states
+# ---------------------------------------------------------------------------
+# Main app
+# ---------------------------------------------------------------------------
+def main():
+    st.set_page_config(page_title="🧜‍♀️Code Chat", layout="wide")
+
+    # -- Session state defaults ----------------------------------------------
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "docs" not in st.session_state:
         st.session_state.docs = None
-    
-    # Header
-    st.title("🧚🏻‍♀️Code Chat")
-    st.caption("Powered by 🍓 Google Gemini and 🌷 LlamaIndex")
-    
-    # GitHub URL Input
+    if "show_api_dialog" not in st.session_state:
+        st.session_state["show_api_dialog"] = False
+
+    # -- Open API-key dialog if flagged --------------------------------------
+    if st.session_state["show_api_dialog"]:
+        show_api_key_dialog()
+
+    # -- Header --------------------------------------------------------------
+    st.title("🧜‍♀️Code Chat")
+    st.caption("Powered by 🌈Google Gemini and 🦙LlamaIndex")
+
+    # Show badge when user-supplied keys are active
+    if st.session_state.get("user_gemini_key") or st.session_state.get("user_github_token"):
+        st.success("Using your custom API keys for this session.", icon="✅")
+
+    # -- GitHub URL Input ----------------------------------------------------
     st.subheader("GitHub Repository")
-    repo_url = st.text_input("GitHub Repository URL", placeholder="Enter repository URL", label_visibility="collapsed")
-    
+    repo_url = st.text_input(
+        "GitHub Repository URL",
+        placeholder="Enter repository URL",
+        label_visibility="collapsed",
+    )
+
     if st.button("Load Repository", type="primary"):
         if repo_url:
             try:
-                github_token = os.getenv("GITHUB_TOKEN")
-                gemini_api_key = os.getenv("GEMINI_API_KEY")
-                
+                github_token = get_github_token()
+                gemini_api_key = get_gemini_key()
+
                 if not github_token or not gemini_api_key:
-                    st.error("Missing API keys")
+                    st.error(
+                        "Missing API keys. Click **Add API Keys** below to add your own."
+                    )
                     st.stop()
-                
+
                 owner, repo, branch = parse_github_url(repo_url)
                 with st.spinner("Loading repository..."):
                     st.session_state.docs = load_github_data(github_token, owner, repo, branch)
-                st.success("✓ Repository loaded successfully")
+                st.success("Repository loaded successfully")
+
             except Exception as e:
-                st.error(f"Error: {str(e)}")
-                
-    st.write("") # Add some spacing
-    
-    # Action Buttons
-    col1, col2 = st.columns(2)
+                if is_quota_error(e):
+                    st.session_state["show_api_dialog"] = True
+                    st.rerun()
+                else:
+                    st.error(f"Error: {str(e)}")
+
+    st.write("")  # spacing
+
+    # -- Action Buttons ------------------------------------------------------
+    col1, col2, col3 = st.columns(3)
     with col1:
-        st.link_button("✨ Star Repo", "https://github.com/annshita/RAG-Code-Chat", use_container_width=True)
+        st.link_button("Star Repo", "https://github.com/annshita/RAG-Code-Chat", use_container_width=True)
     with col2:
-        if st.button("🍃 Clear Chat", use_container_width=True):
+        if st.button("Clear Chat", use_container_width=True):
             st.session_state.messages = []
             st.rerun()
-    
-    # Display chat messages
+    with col3:
+        if st.button("Add API Keys", use_container_width=True):
+            st.session_state["show_api_dialog"] = True
+            st.rerun()
+
+    # -- Chat messages -------------------------------------------------------
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
-    
-    # Chat input
+
+    # -- Chat input ----------------------------------------------------------
     if prompt := st.chat_input("Ask about the repository..."):
         if not st.session_state.docs:
             st.error("Please load a repository first")
             st.stop()
-        
-        # Add user message
+
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
-        
-        # Generate response
+
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
                     response = run_rag_completion(prompt, st.session_state.docs)
                     st.markdown(response)
                     st.session_state.messages.append({"role": "assistant", "content": response})
+
+                    @st.fragment
+                    def download_response(resp: str):
+                        st.download_button(
+                            label="Download message",
+                            type="secondary",
+                            data=resp,
+                            file_name="chatbot_response.md",
+                            mime="text/plain",
+                            icon=":material/download:",
+                        )
+
                     download_response(response)
+
                 except Exception as e:
-                    st.error(f"Error: {str(e)}")
+                    if is_quota_error(e):
+                        st.session_state["show_api_dialog"] = True
+                        st.warning(
+                            "API quota exceeded. A dialog has opened — add your own keys to continue."
+                        )
+                        st.rerun()
+                    else:
+                        st.error(f"Error: {str(e)}")
+
 
 if __name__ == "__main__":
     main()
-

@@ -2,9 +2,28 @@ import streamlit as st
 import os
 
 # Fix for Streamlit Cloud "Security Violation [pathsec.open]: refusing multiply-linked file"
-# Force NLTK and LlamaIndex to use a temporary writable directory instead of the bundled static cache.
-os.environ["NLTK_DATA"] = "/tmp/nltk_data"
-os.environ["LLAMA_INDEX_CACHE_DIR"] = "/tmp/llama_index_cache"
+# Use PRIVATE (owner-only) directories under the user's home. NLTK refuses to load
+# data from directories that are writable by other accounts (e.g. a shared /tmp one).
+_BASE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "rag_code_chat")
+NLTK_DIR = os.path.join(_BASE_DIR, "nltk_data")
+LLAMA_CACHE_DIR = os.path.join(_BASE_DIR, "llama_index_cache")
+for _d in (_BASE_DIR, NLTK_DIR, LLAMA_CACHE_DIR):
+    os.makedirs(_d, exist_ok=True)
+    try:
+        os.chmod(_d, 0o700)
+    except OSError:
+        pass
+os.environ["NLTK_DATA"] = NLTK_DIR
+os.environ["LLAMA_INDEX_CACHE_DIR"] = LLAMA_CACHE_DIR
+
+import nltk
+if NLTK_DIR not in nltk.data.path:
+    nltk.data.path.insert(0, NLTK_DIR)
+for _res, _path in (("stopwords", "corpora/stopwords"), ("punkt_tab", "tokenizers/punkt_tab")):
+    try:
+        nltk.data.find(_path)
+    except LookupError:
+        nltk.download(_res, download_dir=NLTK_DIR, quiet=True, force=True)
 
 from llama_index.core import Settings, VectorStoreIndex, PromptTemplate
 from llama_index.embeddings.gemini import GeminiEmbedding
